@@ -65,10 +65,23 @@ class BaseRuntime {
       throw new this.serverless.classes.Error(`Function handler (${handlerFile}) does not exist.`)
     }
 
+    const zipPath = this.getArtifactPath(functionObject);
+
     return this.getArtifactZip(functionObject)
       .then(zip => this.processActionPackage(handlerFile, zip))
-      .then(zip => zip.generateAsync({type: 'nodebuffer'}))
-      .then(buf => buf.toString('base64'))
+      .then(zip => Promise.all([
+        zip.generateNodeStream({
+          type: 'nodebuffer',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 9 },
+          streamFiles: true,
+        })
+        .pipe(fs.createWriteStream(zipPath)),
+        zip.generateAsync({
+          type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 9 },
+        }),
+      ]))
+      .then(results => results[1].toString('base64'));
   }
 
   getArtifactZip(functionObject) {
